@@ -56,9 +56,14 @@ public class ColorImage {
    */
   public int[] getPixel(int x, int y) {
     int rgb = pixelData[x][y];
-    int red = (rgb >> 16) & 0xFF;
-    int green = (rgb >> 8) & 0xFF;
-    int blue = rgb & 0xFF;
+    Color color = new Color(rgb);
+    int red = color.getRed();
+    int green = color.getGreen();
+    int blue = color.getBlue();
+
+    //int red = (rgb >> 16) & 0xFF;
+    //int green = (rgb >> 8) & 0xFF;
+    //int blue = rgb & 0xFF;
     return new int[] { red, green, blue };
   }
 
