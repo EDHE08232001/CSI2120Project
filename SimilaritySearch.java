@@ -13,8 +13,8 @@ public class SimilaritySearch {
    *             args[1] is the directory containing the dataset images.
    */
   public static void main(String[] args) {
-    String queryImagePath = "./queryImages/q00.jpg";
-    String datasetPath = "./queryImages/";
+    String queryImagePath = args[0];
+    String datasetPath = args[1];
 
     // Load the query image and compute its histogram
     ColorImage queryImage = new ColorImage(queryImagePath);

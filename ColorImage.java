@@ -2,6 +2,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.awt.*;
 
 /**
  * Class representing a color image, facilitating operations like pixel access
@@ -61,9 +62,9 @@ public class ColorImage {
     int green = color.getGreen();
     int blue = color.getBlue();
 
-    //int red = (rgb >> 16) & 0xFF;
-    //int green = (rgb >> 8) & 0xFF;
-    //int blue = rgb & 0xFF;
+    // int red = (rgb >> 16) & 0xFF;
+    // int green = (rgb >> 8) & 0xFF;
+    // int blue = rgb & 0xFF;
     return new int[] { red, green, blue };
   }
 
