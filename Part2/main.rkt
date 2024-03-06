@@ -5,19 +5,21 @@
          racket/file)
 
 ; ColorHistogram Section
-; Custom function to read all lines from a file and return a list of lines
+; Custom function to read all lines from a file and return a list of lines, with basic error handling
 (define (read-all-lines filename)
-  (with-input-from-file filename
-    (lambda ()
-      (let loop ((line (read-line 'eof))
-                 (lines '()))
-        (if (eq? line 'eof)
-            (reverse lines)
-            (loop (read-line 'eof) (cons line lines)))))))
+  (if (file-exists? filename)
+      (with-input-from-file filename
+        (lambda ()
+          (let loop ((line (read-line 'eof))
+                     (lines '()))
+            (if (eq? line 'eof)
+                (reverse lines)
+                (loop (read-line 'eof) (cons line lines))))))
+      (error "File does not exist")))
 
-; Function to split string into a list of numbers, assuming space-separated values
-(define (string-split str sep)
-  (map string->number (filter (lambda (s) (not (string=? s ""))) (string-split str sep))))
+; Corrected function to split string into a list of numbers, assuming space-separated values
+(define (string-split str)
+  (map string->number (filter (lambda (s) (not (string=? s ""))) (string-split str " "))))
 
 ; Corrected string-split to avoid self-call and ensure it works as expected
 (define (corrected-string-split str)
@@ -29,14 +31,13 @@
       '()
       (cons (take lst 3) (group-by-3 (drop lst 3)))))
 
-; Function to read a PPM image and return its pixel data as a list of lists
+; Function to read a PPM image and return its pixel data as a list of RGB tuples
 (define (read-ppm filename)
-  (let ((lines (read-all-lines filename)))
-    (let* ((header (first lines)) ; Skip the PPM header (P3)
-           (dimensions (second lines)) ; Image dimensions (width height)
-           (max-color (third lines)) ; Max color value, usually 255
-           (pixel-lines (drop lines 3))) ; Pixel data starts here
-      (map corrected-string-split pixel-lines))))
+  (let* ((lines (read-all-lines filename))
+         ; Assuming the first three lines are header, dimensions, and max color value
+         (pixel-lines (drop lines 3))
+         (pixels-flat-list (apply append (map corrected-string-split pixel-lines)))) ; Flatten the list of lists into a single list
+    (group-by-3 pixels-flat-list))) ; Group every 3 elements (for RGB)
 
 ; Function to compute the histogram from pixel data
 (define (compute-histogram pixels depth)
