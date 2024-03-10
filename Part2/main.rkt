@@ -1,123 +1,156 @@
+; Project Part 2
+; Edward He 300176553
+; LianYi Chen 300248303
+
 #lang racket
 
 (require racket/list
-         racket/port
+         racket/vector
          racket/file)
 
-; Function to read all lines from a file and return a list of lines
-(define (read-all-lines filename)
-  (printf "Reading file: ~a\n" filename) ; Indicator of file being read
-  (if (file-exists? filename)
-      (with-input-from-file filename
-        (lambda ()
-          (let loop ((line (read-line)))
-            (if (eof-object? line)
-                '()
-                (cons line (loop (read-line)))))))
-      (error "File does not exist")))
-
-; Function for splitting strings into numbers
-(define (string-split-into-numbers str)
-  (map string->number (filter (lambda (s) (not (string=? s "")))
-                              (string-split str " ")))) ; Use " " for splitting by space
-
-; Helper function to group every 3 elements, adjusted to handle lists with fewer than 3 elements gracefully
-(define (group-by-3 lst)
-  (cond
-    [(null? lst) '()] ; When the list is empty, return an empty list
-    [(< (length lst) 3) (list lst)] ; When the list has fewer than 3 elements, return the list wrapped in a list
-    [else (cons (take lst 3) (group-by-3 (drop lst 3)))])) ; Otherwise, group normally
-
-; Function to read a PPM image and return its pixel data as a list of RGB tuples
+; ColorHistogram
+; Helper function to read a PPM file and return its contents as a list
 (define (read-ppm filename)
-  (let* ((lines (read-all-lines filename))
-         (pixel-lines (drop lines 3))
-         (pixels-flat-list (apply append (map string-split-into-numbers pixel-lines))))
-    (group-by-3 pixels-flat-list)))
+  (with-input-from-file filename
+    (lambda ()
+      (let* ((header (read-line))
+             (dimensions (map string->number (string-split (read-line) " ")))
+             (max-color-value (read-line))
+             (pixels '()))
+        (do ((line (read-line) (read-line)))
+            ((eof-object? line) (if (= (length dimensions) 2) ; Ensure dimensions are correct
+                                    (list (first dimensions) ; width
+                                          (second dimensions) ; height
+                                          (apply append (reverse pixels)))
+                                    '())) ; Return an empty list on error
+          (set! pixels (cons (map string->number (string-split line " ")) pixels)))))))
 
-; Helper function for computing histogram index
-(define (calculate-index r g b depth)
-  (let* ([bin-size (expt 2 depth)]
-         [r-index (/ r bin-size)]
-         [g-index (/ g bin-size)]
-         [b-index (/ b bin-size)])
-    (+ (* r-index (expt bin-size 2)) (* g-index bin-size) b-index)))
+; Image width from PPM data
+(define (image-width image)
+  (if (and (list? image) (> (length image) 0))
+      (first image)
+      0)) ; Return 0 as default if image data is incorrect
 
-; Function to compute the histogram from pixel data
-(define (compute-histogram pixels depth)
-  (let* ([num-bins (expt 2 (* 3 depth))]
-         [histogram (make-vector num-bins 0)])
-    (for-each (lambda (pixel)
-                (let* ([r (first pixel)]
-                       [g (list-ref pixel 1)]
-                       [b (list-ref pixel 2)]
-                       [index (calculate-index r g b depth)])
-                  (vector-set! histogram index (+ 1 (vector-ref histogram index)))))
-              pixels)
-    histogram))
+; Image height from PPM data
+(define (image-height image)
+  (if (and (list? image) (> (length image) 1))
+      (second image)
+      0)) ; Return 0 as default if image data is incorrect
 
-; Function to save a histogram to a file
-(define (save-histogram histogram filename)
-  (with-output-to-file filename
-    (lambda () (for-each (lambda (val) (display val) (newline)) (vector->list histogram)))))
+; Get pixel from PPM data
+(define (get-pixel image x y)
+  (let* ((width (image-width image))
+         (pixels (third image))
+         (index (* 3 (+ x (* y width)))))
+    (vector (list-ref pixels index)
+            (list-ref pixels (+ index 1))
+            (list-ref pixels (+ index 2)))))
 
-; Function to compare two histograms
+; Constructor for ColorHistogram Based on Color Depth
+(define (create-color-histogram depth)
+  (let ((num-bins (expt 2 (* depth 3))))
+    (make-vector num-bins 0)))
+
+; Calculating Histogram Index (Helper) using arithmetic-shift
+(define (calculate-histogram-index rgb depth)
+  (let* ((r (arithmetic-shift (vector-ref rgb 0) (- depth 8)))
+         (g (arithmetic-shift (vector-ref rgb 1) (- depth 8)))
+         (b (arithmetic-shift (vector-ref rgb 2) (- depth 8))))
+    (+ (arithmetic-shift r (* 2 depth)) (arithmetic-shift g depth) b)))
+
+; Setting Image Histogram
+(define (set-image-histogram histogram image depth)
+  (let* ((width (image-width image))
+         (height (image-height image))
+         (total-pixels (* width height)))
+    (vector-fill! histogram 0) ; Reset histogram
+    (for ([x (in-range width)])
+      (for ([y (in-range height)])
+        (let* ((pixel (get-pixel image x y))
+               (index (calculate-histogram-index pixel depth)))
+          (vector-set! histogram index (+ (vector-ref histogram index) 1)))))
+    (if (> total-pixels 0) ; Check to prevent division by zero
+        (for ([i (in-range (vector-length histogram))])
+          (vector-set! histogram i (/ (vector-ref histogram i) total-pixels)))
+        (displayln "Warning: Image has zero pixels, cannot normalize histogram."))))
+
+; Comparing Histograms
 (define (compare-histograms hist1 hist2)
-  (let ([size (vector-length hist1)])
-    (if (not (= size (vector-length hist2)))
-        (error "Histograms must be of the same size")
-        (let loop ([index 0]
-                   [sum 0])
-          (if (= index size)
-              sum
-              (loop (add1 index)
-                    (+ sum (abs (- (vector-ref hist1 index)
-                                   (vector-ref hist2 index))))))))))
+  (let ((similarity (apply + (map min (vector->list hist1) (vector->list hist2)))))
+    similarity))
 
-; Custom structure to represent an image
-(define-struct color-image (width height depth pixels))
-
-; Function to load an image from a PPM file
-(define (load-ppm-image filename)
-  (let* ((lines (read-all-lines filename))
-         (dimensions (string-split-into-numbers (list-ref lines 1)))
-         (width (first dimensions))
-         (height (list-ref dimensions 1))
-         (max-color (string->number (list-ref lines 2)))
-         (pixels (read-ppm filename)))
-    (make-color-image width height 24 pixels)))
-
-; Function to list all PPM files in a directory
-(define (list-ppm-files dir)
-  (let ((files (filter (lambda (file) (string-suffix? file ".ppm"))
-                       (directory-list dir))))
-    (printf "Files to be processed after directory scan: ~a\n" files) ; Indicator of files to be processed
-    files))
-
-; Main SimilaritySearch function with printing top 5 similarities
-; Main SimilaritySearch function with printing top 5 similarities and additional diagnostics
-(define (SimilaritySearch queryImageFilename imageDatasetDir)
-  (printf "Starting SimilaritySearch with query image: ~a in directory: ~a\n" queryImageFilename imageDatasetDir)
-  (let* ((queryImage (load-ppm-image queryImageFilename))
-         (queryHistogram (compute-histogram (color-image-pixels queryImage) 8))
-         (ppmFiles (list-ppm-files imageDatasetDir)))
-    (printf "PPM files found: ~a\n" ppmFiles) ; Print found PPM files for debugging
-    (let ((similarities (map (lambda (file)
-                               (printf "Processing file: ~a\n" file) ; Print each file being processed
-                               (let* ((datasetImage (load-ppm-image file))
-                                      (datasetHistogram (compute-histogram (color-image-pixels datasetImage) 8))
-                                      (similarity (compare-histograms queryHistogram datasetHistogram)))
-                                 (cons file similarity)))
-                             ppmFiles)))
-      (let ((sorted-similarities (sort similarities (lambda (x y) (> (cdr x) (cdr y))))))
-        (for-each (lambda (pair)
-                    (printf "File: ~a - Similarity: ~a\n" (car pair) (cdr pair)))
-                  (take sorted-similarities 5)))))
-  (printf "SimilaritySearch completed.\n"))
+; Saving Histogram to a File
+(define (save-histogram histogram filename)
+  (with-output-to-file filename #:exists 'replace
+    (lambda ()
+      (for ([i (in-range (vector-length histogram))])
+        (display (vector-ref histogram i))
+        (when (< i (- (vector-length histogram) 1))
+          (display ","))))))
 
 
 
 
 
+; ColorImage
+; Function to reduce color depth of an image
+(define (reduce-color image depth)
+  (let* ((width (image-width image))
+         (height (image-height image))
+         (pixels (third image))
+         (shift (- 8 depth))
+         (new-pixels '()))
+    (for ([y (in-range height)])
+      (for ([x (in-range width)])
+        (let* ((pixel-index (* 3 (+ x (* y width))))
+               (rgb (list (list-ref pixels pixel-index)
+                          (list-ref pixels (+ pixel-index 1))
+                          (list-ref pixels (+ pixel-index 2))))
+               (reduced-rgb (map (lambda (color)
+                                   (bitwise-and (arithmetic-shift color (- shift)) #xFF))
+                                 rgb)))
+          (set! new-pixels (append new-pixels reduced-rgb)))))
+    (list width height new-pixels)))
 
-(SimilaritySearch "./queryImages/q00.ppm" "./queryImages/")
+; Function to access a specific pixel's RGB value after color reduction
+(define (get-reduced-pixel image x y depth)
+  (let* ((reduced-image (reduce-color image depth))
+         (pixels (third reduced-image))
+         (index (* 3 (+ x (* y (image-width image))))))
+    (vector (list-ref pixels index)
+            (list-ref pixels (+ index 1))
+            (list-ref pixels (+ index 2)))))
+
+
+
+
+
+; SimilaritySearch
+; Helper function to list all .ppm files in a directory
+(define (list-ppm-files directory)
+  (filter (lambda (file-path)
+            (string-suffix? (path->string file-path) ".ppm"))
+          (directory-list directory)))
+
+; SimilaritySearch function
+(define (SimilaritySearch queryImageFilename imageDatasetDirectory depth)
+  (let ((queryImage (read-ppm queryImageFilename))
+        (imageFiles (list-ppm-files imageDatasetDirectory))
+        (queryHistogram (create-color-histogram depth)))
+    ; Set histogram for the query image
+    (set-image-histogram queryHistogram queryImage depth)
+    ; Process each image in the directory
+    (let ((scores (map (lambda (imageFile)
+                         (let ((image (read-ppm (build-path imageDatasetDirectory imageFile)))
+                               (imageHistogram (create-color-histogram depth)))
+                           ; Set histogram for the current image
+                           (set-image-histogram imageHistogram image depth)
+                           ; Compute similarity and associate with the file name
+                           (cons imageFile (compare-histograms queryHistogram imageHistogram))))
+                       imageFiles)))
+      ; Sort by similarity score and select top 5
+      (let ((sorted-scores (sort scores (lambda (x y) (> (cdr x) (cdr y))))))
+        (map car (take sorted-scores 5))))))
+
+; Example Usage:
+(SimilaritySearch "./queryImages/q00.ppm" "./queryImages/" 3)
