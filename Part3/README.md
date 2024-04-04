@@ -28,10 +28,6 @@ Replace `<path/to/queryImage.jpg>` with the path to your query image and `<path/
 
 To evaluate the impact of concurrency on processing time, you can adjust the `K` value in `main.go`, which determines the number of concurrent goroutines used for computing histograms. Rerun the program with different `K` values to find the optimal configuration.
 
-## Built With
-
-- [Go](https://golang.org/) - The Go Programming Language
-
 ## Authors
 
 - **Edward He** - *Initial work* - Student ID: 300176553
@@ -45,7 +41,3 @@ To evaluate the impact of concurrency on processing time, you can adjust the `K`
 - `similarity.go` - Functions for calculating similarity scores between histograms.
 - `concurrencyManager.go` - Manages concurrent computation of histograms.
 - `utils.go` - Utility functions for the project.
-
-## Acknowledgments
-
-- Special thanks to the Go community for providing extensive documentation and resources.
